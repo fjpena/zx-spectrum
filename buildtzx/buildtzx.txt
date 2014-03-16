@@ -1,0 +1,195 @@
+		TZX BUILD TOOL by utopian / RetroWorks
+		--------------------------------------
+		
+1. INTRODUCCIÓN
+---------------
+
+El propósito de la utilidad es crear ficheros TZX con carga normal o turbo, a
+partir de un conjunto de ficheros. La idea principal es poder ir probando un
+programa durante su desarrollo con el mismo cargador que se empleará para su
+distribución, para así evitar problemas durante la fase de creación del máster.
+
+Como objetivos adicionales, se pueden cargar los bloques comprimidos y con 
+diferentes tipos de carga, incluyendo carga turbo. La utilidad es extensible,
+para poder añadir nuevos esquemas de carga.
+
+2. LÍNEA DE COMANDOS
+--------------------
+
+Usage:  buildtzx -l[1|2|3] -i <template_file.txt> -o <file.tzx> -n <BASIC loader name>
+
+ 	-l: Loader type
+		1: standard ROM loader, headerless (261 bytes for the loader, + the table)
+		2: modified ROM loader, just with a different color, headerless (453 bytes for the loader, + the table)
+		3: Turbo loader, based on the ROM code, headerless (453 bytes for the loader, + the table)
+
+	-i: template file. This file will specify the binary files to include in the TZX, in a special format:
+	
+	# Sample template file. Comment liness start with #, no comments allowed in real lines
+	# Separator character is BLANK
+	# The format is
+	#
+	# <number of entries>   <- Then, for each entry
+	# <filename> <where to load> <where to copy after loading> <RAM bank to store at> <1|0>  
+	# (1 means compress block before storing, 0 do not compress)
+	# <execution address> 	<- RANDOMIZE USR value!
+	#
+	# Example: load a compressed screen$ at 32768, then uncompress it to 16384, then RANDOMIZE USR 12345
+	# 1
+	# myscr.scr 32768 16384 0 1
+	# 12345
+	# 
+
+	-o output file (TZX)
+
+	-n BASIC loader file name, max 10 characters
+	
+3. FICHERO TEMPLATE
+-------------------
+
+El fichero de template (plantilla) es el corazón de la utilidad. Es un fichero 
+en texto plano, que usamos para definir qué bloques se cargarán, cómo y en qué
+orden. El formato es bastante sencillo, veámoslo con un ejemplo práctico:
+
+# two simple blocks...
+# name load_addr  copy_addr  ram_bank  compressed?
+5
+betiled.scr 32768 16384 0 1
+page1.bin 32768 49152 1 1
+page3.bin 32768 49152 3 1
+mainmem.bin 40000 24600 0 1
+betiled.bin 36230 36230 0 0
+36230
+
+Los comentarios serán siempre una línea que empieza por el carácter # . Ojo, no
+se puede poner un comentario a mitad de línea, ni empezar una línea con espacio
+y luego poner el carácter #. El parser no es tan potente :).
+
+La primera línea de "chicha" es un único número, que define el número de bloques
+a cargar, en este caso 5. A partir de ahí tenemos 5 líneas con el mismo formato:
+
+  - Nombre de fichero: 	es el nombre de fichero a cargar
+  - Dirección de carga: aquí se cargará el bloque (igual que un LOAD "" CODE XXXXX)
+  - Dirección de copia: aquí se copiará/descomprimirá el bloque después de cargarlo. 
+  			Esto significa que podemos cargar los datos donde queramos y 
+  			luego moverlos a su ubicación definitiva, y es especialmente 
+  			útil si queremoscomprimir los bloques. En el ejemplo, 
+  			cargamos el fichero betiled.scr (la pantalla de presentación)
+  			en 32768, y luego la descomprimimos a la zona de pantalla.
+  			Es posible hacer que la dirección de carga sea la misma que la
+  			de copia (ver el último bloque). Si hacemos esto, simplemente
+  			no copiaremos nada. ¡¡OJO!! Esto sólo sirve para bloques no
+  			comprimidos, si el bloque está comprimido debemos moverlo a
+  			otra zona.
+  - Banco de memoria:	especifica el banco de memoria activo durante la copia. En 
+  			modo 48k no hará nada, pero en modo 128k activará este banco
+  			antes de copiar los datos. Esto nos permite cargar las páginas
+  			de modo 128k en la memoria baja, y luego subirlas a su sitio.
+  			En el ejemplo cargamos las páginas 1 y 3 en 32768, y luego 
+  			las movemos a su dirección de destino (49152) con sus 
+  			respectivos bancos activos.
+  - ¿Comprimir?		Este flag indica a la utilidad si debe comprimir el bloque 
+  			antes de meterlo en el TZX o no. El cargador incluye el 
+  			descompresor, así que comprimirlo nos sale de gratis :).
+
+La última línea es la dirección de inicio del programa (RANDOMIZE USR XXXXX).
+
+4. DETALLES TÉCNICOS
+--------------------
+
+4.1 COMPRESOR
+
+La versión actual utiliza el compresor APACK, que debe estar instalado en el 
+sistema y visible en el PATH como apack.exe. Es llamado por la utilidad en caso 
+de utilizar bloques comprimidos, para crear un fichero temporal llamado 
+buildtzx.tmp, que se borrará después de su uso.
+
+Si el compresor no está en el PATH o tiene otro nombre, podemos usar la variable
+de entorno PACKER para indicar a la utilidad dónde está. Veamos un ejemplo:
+
+(Windows) 	set PACKER="pepito.exe"
+(Linux-bash)	export PACKER=/usr/local/bin/apack
+
+Para futuras versiones investigaré el uso de Exomizer.
+
+4.2 ROBUSTEZ
+
+La utilidad tiene ciertos controles para no cascar a la mínima, pero tampoco se
+ha hecho pensando en una seguridad a prueba de bombas... Así que no probéis a crear
+TZX con 1000 bloques, o un fichero con más de 300 caracteres en el nombre, porque
+cascará :). En todo caso, si encontráis un bug podéis avisarme o arregladlo 
+vosotros mismos, el código está disponible.
+
+4.3 RUTINAS DE CARGA
+
+La utilidad está pensada para soportar múltiples esquemas de carga, extendibles
+en un futuro. De momento soporta 3 esquemas diferentes. Estos esquemas tienen unos
+cuantos puntos en común:
+
+- El cargador BASIC hace un CLEAR 23999, y carga un cargador ASM en 24000.
+- El cargador ASM siempre se carga en la dirección 24000, y utiliza una tabla
+  para especificar el orden de los bloques a cargar. Esta tabla ocupará 
+  4+(7*num bloques) bytes, por lo que hay que tener en cuenta ese tamaño además
+  del del cargador para situar el origen de nuestro programa.
+- El cargador incluye la rutina de descompresión de la APlib en la dirección
+  24003, por lo que podemos reutilizarlo si lo creemos conveniente, y así ahorrar
+  unos cuantos bytes.
+  
+En cuanto a las rutinas de carga en sí:
+
+   4.3.1 RUTINA 1 (ROM ESTÁNDAR)
+   
+   Esta rutina utiliza bloques estándar sin cabecera, y simplemente llama a la
+   rutina de la ROM situada en la dirección $0556. Ocupa 261 bytes + el tamaño 
+   de la tabla de carga.
+   
+   4.3.2 RUTINA 2 (ROM MODIFICADA)
+   
+   Esta rutina también utiliza bloques estándar sin cabecera. En este caso, usa
+   una copia de la rutina de la ROM, modificada para utilizar otros colores en 
+   el borde (rojo y negro). Realmente no es muy útil, sólo como curiosidad :).
+   
+   La rutina ocupa 453 bytes + el tamaño de la tabla de carga, y además 
+   descomprime la copia de la rutina de la ROM a partir de la dirección 65345
+   (página 0). Esto significa que NO PODEMOS CARGAR NADA EN LAS DIRECCIONES
+   65345 - 65535 de la página 0, aunque sí podemos cargarlo en el resto de 
+   páginas (cargando en 32768 y luego copiando a 49152 con el banco activo).
+   
+   4.3.3 RUTINA 3 (ROM MODIFICADA, TURBO 2250 baudios)
+   
+   Esta rutina es una modificación de la rutina 2, cambiando las constantes de
+   carga de la ROM para permitir cargas turbo a 2250 baudios. Como curiosidad,
+   estas son las constantes que utiliza:
+   
+    	- Length of PILOT pulse:	2168 (valor estándar)
+	- Length of first SYNC pulse:	667  (valor estándar)
+	- Length of second SYNC pulse:	735  (valor estándar)
+	- Length of zero BIT pulse: 	518  (ROM default: 855)
+	- Length of one BIT pulse:	1036 (ROM default: 1710)
+	- Length of the pilot tone:	3223 (valor estándar)
+   
+   La rutina ocupa 453 bytes + el tamaño de la tabla de carga, y además 
+   descomprime la copia de la rutina de la ROM a partir de la dirección 65345
+   (página 0). Esto significa que NO PODEMOS CARGAR NADA EN LAS DIRECCIONES
+   65345 - 65535 de la página 0, aunque sí podemos cargarlo en el resto de 
+   páginas (cargando en 32768 y luego copiando a 49152 con el banco activo).
+   
+
+5. HISTORIAL DE VERSIONES
+-------------------------
+
+- (10 enero 2008)   0.1 Primera versión pública
+
+- (16 febrero 2008) 0.2 Corregida longitud del segundo pulso SYNC: es 735 en
+		        vez de 667. Ese error hace que el TZX a 2250 cargue en
+			emulador, pero no en máquina real.
+
+- (06 abril 2008)   0.3 Recortados 19 bytes en la rutina 1 y 35 bytes en las
+			rutinas 2 y 3. Esto incluye 15 en la rutina de carga.
+
+- (14 agosto 2010)  0.4 Preservamos el registro IY antes de ejecutar el 
+                        descompresor. Esto evita problemas posteriores con el
+                        gestor de interrupciones de la ROM, hace el cargador
+                        ROM standard más compatible con DivIDE, etc. Además, consigo
+			compatibilidad con modo USR0 al no preservar el valor de BANK_M
+			en la rutina de paginación

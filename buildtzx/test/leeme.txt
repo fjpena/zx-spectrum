@@ -1,0 +1,6 @@
+Como ejemplo tenemos el BeTiled!. Para generar un par de TZX:
+
+buildtzx -l 1 -i template.txt -o betiled_rom.tzx -n BeTiled!   (carga normal)
+buildtzx -l 3 -i template.txt -o betiled_turbo.tzx -n BeTiled! (carga turbo)
+
+Happy coding!

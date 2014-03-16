@@ -1,0 +1,6 @@
+Para compilar necesitáis:
+
+- Un compilador de C (probado en Windows con Visual C 6.0 y en Linux con GCC)
+- Pasmo para los ficheros .asm
+- BIN2C para convertir a .h
+- Algún tipo de MAKE

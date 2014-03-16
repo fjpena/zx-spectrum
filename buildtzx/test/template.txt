@@ -1,0 +1,9 @@
+# two simple blocks...
+# name load_addr  copy_addr  ram_bank  compressed?
+5
+betiled.scr 32768 16384 0 1
+page1.bin 32768 49152 1 1
+page3.bin 32768 49152 3 0
+mainmem.bin 40000 24600 0 0
+betiled.bin 36230 36230 0 0
+36230

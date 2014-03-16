@@ -1,0 +1,1 @@
+10 border not pi: ink not pi: paper not pi : Clear Val "23999": Load "" code : Print  usr Val "24000"
